@@ -244,6 +244,28 @@ class ApiTests(unittest.TestCase):
         wait_done(self.queue, response.json()['job_id'])
         self.assertEqual(self.client.get('/api/scanner/status').json()['queued'], 0)
 
+    def test_completed_api_job_is_not_reused_with_extended_cache_age(self):
+        body = {'index': 'NIFTYBANK'}
+        first = self.client.post('/api/runs', json=body).json()
+        wait_done(self.queue, first['job_id'])
+        second = self.client.post('/api/runs', json=body).json()
+        self.assertNotEqual(first['job_id'], second['job_id'])
+        wait_done(self.queue, second['job_id'])
+
+    def test_fresh_scan_does_not_join_existing_job(self):
+        release = Event()
+        self.queue.runner = lambda *args: release.wait(5)
+        body = {'index': 'NIFTYBANK', 'use_cache': False}
+        first = self.client.post('/api/runs', json=body).json()
+        try:
+            second = self.client.post('/api/runs', json=body).json()
+            self.assertNotEqual(first['job_id'], second['job_id'])
+            self.assertEqual(second['status'], 'queued')
+        finally:
+            release.set()
+            wait_done(self.queue, first['job_id'])
+            wait_done(self.queue, second['job_id'])
+
     def test_history_without_database_is_explicit(self):
         with patch.dict('os.environ', {'MONGODB_URI': ''}):
             response = self.client.get('/api/history')

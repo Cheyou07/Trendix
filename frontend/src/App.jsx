@@ -17,6 +17,8 @@ export default function App() {
   const [results, setResults] = useState(null);
   const [scanCount, setScanCount] = useState(null);
   const [coverage, setCoverage] = useState(null);
+  const [cacheInfo, setCacheInfo] = useState(null);
+  const [useCache, setUseCache] = useState(true);
   const [loading, setLoading] = useState(false);
   const [scanStatus, setScanStatus] = useState("");
   const scanController = useRef(null);
@@ -40,29 +42,33 @@ export default function App() {
     setSelected(null);
     setScanCount(null);
     setCoverage(null);
+    setCacheInfo(null);
     setScanStatus("");
-  }, [index, setup, mode, allDirection, nearMatchScore]);
+  }, [index, setup, mode, allDirection, nearMatchScore, useCache]);
 
   async function handleScan() {
     if (scanController.current) return;
     const controller = new AbortController();
     scanController.current = controller;
-    const options = { signal: controller.signal, onStatus: setScanStatus };
+    const options = { signal: controller.signal, onStatus: setScanStatus, useCache };
     setLoading(true);
     setError(null);
     setResults(null);
     setCoverage(null);
+    setCacheInfo(null);
     try {
       if (mode === "single") {
         const data = await runScan(index, setup, true, nearMatchScore, options);
         setResults(data.results);
         setScanCount(data.coverage?.evaluated ?? data.count);
         setCoverage(data.coverage);
+        setCacheInfo(data.cache);
       } else {
         const data = await runScanAll(index, allDirection, options);
         setResults(data.results);
         setScanCount(data.coverage?.evaluated ?? data.count);
         setCoverage(data.coverage);
+        setCacheInfo(data.cache);
       }
       setScanStatus("");
     } catch (e) {
@@ -160,6 +166,16 @@ export default function App() {
           </div>
         )}
 
+        {mode !== "history" && (
+          <div className="field-group">
+            <label className="field-label" htmlFor="scan-freshness">Result freshness</label>
+            <select id="scan-freshness" value={useCache ? "cached" : "fresh"} disabled={loading}
+              onChange={(e) => setUseCache(e.target.value === "cached")}>
+              <option value="cached">Reuse results up to 15 minutes old</option>
+              <option value="fresh">Fresh scan — fetch prices again</option>
+            </select>
+          </div>
+        )}
         {mode !== "history" && <button className="primary" onClick={handleScan} disabled={loading}>
           {loading ? "Working…" : "Run scan"}
         </button>}
@@ -181,7 +197,7 @@ export default function App() {
         </button>
 
         <div className="sidebar-footnote">
-          Public beta: identical scans may reuse results for five minutes. The server may take a minute to wake up. Index lists can use a limited fallback when NSE is unavailable.
+          Public beta: shared results can be reused for up to 15 minutes. Choose a fresh scan to fetch prices again. The server may take a minute to wake up. Index lists can use a limited fallback when NSE is unavailable.
         </div>
       </aside>
 
@@ -208,6 +224,16 @@ export default function App() {
               <button className="secondary" onClick={handleScan}>Retry</button>
             </div>
           </div>
+        )}
+
+        {!error && cacheInfo && (
+          <p className="status-line" role="status">
+            Reused evaluations for {cacheInfo.reused_stocks} stocks; recalculated {cacheInfo.recalculated_stocks}.
+            {cacheInfo.oldest_price_fetch && <> Prices requested between {new Date(cacheInfo.oldest_price_fetch).toLocaleString()} and {new Date(cacheInfo.newest_price_fetch).toLocaleString()}.</>}
+            {cacheInfo.bypassed && <> Fresh scan: cached evaluations were bypassed.</>}
+            {!cacheInfo.available && <> Shared cache unavailable; uncached stocks were calculated normally.</>}
+            {" "}Today's candle can still change; data may be delayed by the provider.
+          </p>
         )}
 
         {!error && coverage?.failed > 0 && (
@@ -238,6 +264,7 @@ export default function App() {
           symbol={selected}
           setup={mode === "single" ? setup : (results?.find((r) => r.symbol === selected)?.best_setup_id || "setup_1")}
           allSetupsForStock={mode === "all" ? results?.find((r) => r.symbol === selected)?.setups : null}
+          scanDetail={mode === "single" ? results?.find((r) => r.symbol === selected) : null}
           onClose={() => setSelected(null)}
         />
       )}

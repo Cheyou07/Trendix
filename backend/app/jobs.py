@@ -80,13 +80,14 @@ class JobQueue:
         self.max_pending = max_pending
         self.runner = runner
 
-    def submit(self, key, work, payload):
+    def submit(self, key, work, payload, reuse_completed=True, deduplicate=True):
         with self.lock:
             now = time.monotonic()
             self.jobs = {k: j for k, j in self.jobs.items()
                          if j['status'] in ACTIVE or now - j['finished'] < self.ttl}
             for job in self.jobs.values():
-                if job['key'] == key and job['status'] != 'failed':
+                if (deduplicate and job['key'] == key and
+                        (job['status'] in ACTIVE or (reuse_completed and job['status'] == 'completed'))):
                     return self._public(job)
             if self.running_id is not None and len(self.pending) >= self.max_pending:
                 raise HTTPException(429, 'The scan queue is full. Please retry shortly.',

@@ -21,11 +21,12 @@ export async function getSetups() {
 }
 
 export async function runScan(index, setup, nearMatches = true, nearMatchScore = 70, options) {
-  return runScanJob(request, { index, setup, mode: "single", near_matches: nearMatches, near_match_score: nearMatchScore }, options);
+  return runScanJob(request, { index, setup, mode: "single", near_matches: nearMatches, near_match_score: nearMatchScore,
+    use_cache: options?.useCache !== false }, options);
 }
 
 export async function runScanAll(index, direction = "all", options) {
-  return runScanJob(request, { index, direction, mode: "all" }, options);
+  return runScanJob(request, { index, direction, mode: "all", use_cache: options?.useCache !== false }, options);
 }
 
 export async function getStockDetail(symbol, setup) {

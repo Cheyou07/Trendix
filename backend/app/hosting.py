@@ -29,6 +29,7 @@ class ScanRequest(BaseModel):
     direction: Literal['all', 'bullish', 'bearish'] = 'all'
     near_matches: bool = True
     near_match_score: float = Field(default=70, ge=0, le=100)
+    use_cache: bool = True
 
 
 class SnapshotRequest(BaseModel):
@@ -73,7 +74,11 @@ def install_hosting(app, queue=None):
             key = ('single', request.index, request.setup, request.near_matches, request.near_match_score)
         else:
             key = ('all', request.index, request.direction)
-        return queue.submit(key, execute_scan, request.model_dump())
+        # Completed results must be rechecked against Atlas freshness, not given
+        # a second lifetime in the in-memory job cache. Fresh scans also bypass
+        # active-job deduplication.
+        return queue.submit((*key, request.use_cache), execute_scan, request.model_dump(),
+                            reuse_completed=False, deduplicate=request.use_cache)
 
     @app.get('/api/runs/{job_id}')
     def get_run(job_id: str):

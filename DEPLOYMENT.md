@@ -152,19 +152,57 @@ index. No local installation or account is required. These interactive runs do
 not overwrite the scheduled history.
 
 Scans use `POST /api/runs` and `GET /api/runs/{job_id}` so the browser waits through
-short polling requests. Identical jobs reuse results for up to five minutes;
+short polling requests. Identical active requests can share work;
 one interactive scan runs at a time, with two additional distinct scans allowed
 in a FIFO queue. There is no global cooldown. The browser shows queue position
 and actual stock progress; it retries admission if the queue is full.
 Each scan runs in a disposable process, terminated after at most ten minutes
 (`SCAN_TIMEOUT_SECONDS` can lower the limit, between 30 and 600 seconds).
-Failed scans release the slot immediately and can be retried. Price data is
-cached locally for five minutes to reduce repeated downloads across setups.
+Failed scans release the slot immediately and can be retried. Interactive results
+are reused through the shared Atlas cache described below.
 Visitors can stop waiting; already-started shared server work continues within
 its deadline. Admission waits and processing share a 30-minute browser deadline.
 Actual scan failures are displayed without silently rerunning them. The previous
 synchronous `/api/scan` and `/api/scan-all` routes have been
 replaced; external API clients must migrate to the job endpoints.
+
+## Shared evaluation cache (15 minutes)
+
+The existing `MONGODB_URI` and `MONGODB_DATABASE` also supply a separate
+`scan_cache` collection. No additional service or secret is needed. Cached
+evaluations are stored in Atlas, shared across users, and survive Render restarts.
+This collection is separate from the seven-day `daily_runs` archive.
+
+- A newly evaluated stock warms results for all nine setups. Both matches and
+  nonmatches are cached, so lowering the near-match threshold does not lose stocks.
+- Index membership and requested direction/threshold are applied to the current
+  request. Overlapping indexes reuse the same stock evaluations.
+- Setup JSON, indicator/evaluation/provider code and relevant dependency versions
+  form the cache fingerprint. A change invalidates previous evaluations.
+- Entries expire 15 minutes after the price-fetch start time, not 15 minutes after
+  reuse. Expiry is checked when processing each stock, independently of MongoDB's
+  asynchronous TTL deletion. Long scans still contain a range of fetch times.
+- A cache miss fetches prices again and recomputes. Failed stocks are not cached
+  as nonmatches. Expired results are never substituted when Yahoo is unavailable.
+- The cache has a short database-operation deadline and fails open: a missing or
+  unavailable database does not prevent interactive scans.
+
+Choose **Result freshness → Fresh scan — fetch prices again** to bypass cached
+evaluations, local price reuse, and existing job reuse. A successful fresh scan
+warms Atlas for later requests. API callers set `use_cache: false` in
+`POST /api/runs`; the default is `true`.
+
+The result screen reports reused/recalculated stock counts and the range of price
+fetch times. Stock condition details use the scan's original breakdown; charts
+are fetched separately and may be newer. Intraday candles can change during the
+15-minute window, and Yahoo itself can return delayed prices. A cache preserves
+the original calculation, not a guarantee that a stock still qualifies now.
+Scheduled seven-day history is never silently used as current scan data.
+
+To verify after deployment, run NIFTYBANK once, change the setup or threshold,
+and run again within 15 minutes. The second run should report reused evaluations.
+A fresh scan should report zero reused stocks. Expired entries and rule changes
+must trigger recalculation. The first cold scan still takes normal scan time.
 
 ## Free-tier and data limitations
 

@@ -10,6 +10,7 @@ from fastapi.responses import StreamingResponse
 
 from .providers.yfinance_provider import YFinanceProvider
 from .errors import ScanError
+from .result_cache import ResultCache
 from .jsonutils import sanitize as _sanitize
 from .universe import get_index_symbols, list_available_indexes
 from .setup_engine import load_setup, list_setups, evaluate_setup
@@ -61,7 +62,7 @@ def get_setups():
 
 
 def scan(index: str = "NIFTY50", setup: str = "setup_1", near_matches: bool = True,
-         near_match_score: float = 70.0, progress_callback=None):
+         near_match_score: float = 70.0, progress_callback=None, use_cache=True):
     stats = {}
     try:
         symbols = get_index_symbols(index)
@@ -80,11 +81,14 @@ def scan(index: str = "NIFTY50", setup: str = "setup_1", near_matches: bool = Tr
     except ValueError as e:
         raise HTTPException(404, str(e))
 
+    result_cache = ResultCache()
+    cache_configs = [load_setup(s['id']) for s in list_setups()] if result_cache.available else None
     try:
         results = scan_universe(
-            provider, symbols, setup_config,
+            YFinanceProvider(cache_ttl=0), symbols, setup_config,
             include_near_matches=near_matches, near_match_score=near_match_score,
             progress_callback=progress_callback, stats=stats,
+            result_cache=result_cache, cache_configs=cache_configs, use_cache=use_cache,
         )
     except ScanError:
         raise
@@ -97,11 +101,15 @@ def scan(index: str = "NIFTY50", setup: str = "setup_1", near_matches: bool = Tr
             f"check your internet connection.",
         )
 
+    finally:
+        result_cache.close()
+
+    cache_info = stats.pop('cache', None)
     return _sanitize({"index": index, "setup": setup_config["name"], "count": len(results),
-                      "coverage": stats, "results": results})
+                      "coverage": stats, "cache": cache_info, "results": results})
 
 
-def scan_all(index: str = "NIFTY50", direction: str = "all", progress_callback=None):
+def scan_all(index: str = "NIFTY50", direction: str = "all", progress_callback=None, use_cache=True):
     """
     Runs every registered setup (optionally filtered to bullish/bearish
     only) against every stock in the universe, fetching each stock's
@@ -118,14 +126,18 @@ def scan_all(index: str = "NIFTY50", direction: str = "all", progress_callback=N
         raise HTTPException(502, f"Could not load the {index} constituent list right now.")
 
     all_setups = list_setups()
+    cache_configs = [load_setup(s['id']) for s in all_setups]
     if direction in ("bullish", "bearish"):
         all_setups = [s for s in all_setups if s["direction"] == direction]
     setup_configs = [load_setup(s["id"]) for s in all_setups]
 
     stats = {}
+    result_cache = ResultCache()
     try:
-        results = scan_universe_all_setups(provider, symbols, setup_configs,
-                                          progress_callback=progress_callback, stats=stats)
+        results = scan_universe_all_setups(YFinanceProvider(cache_ttl=0), symbols, setup_configs,
+                                          progress_callback=progress_callback, stats=stats,
+                                          result_cache=result_cache, cache_configs=cache_configs,
+                                          use_cache=use_cache)
     except ScanError:
         raise
     except Exception as e:
@@ -136,11 +148,16 @@ def scan_all(index: str = "NIFTY50", direction: str = "all", progress_callback=N
             f"rate-limiting requests - wait a minute and try again.",
         )
 
+    finally:
+        result_cache.close()
+
+    cache_info = stats.pop('cache', None)
     return _sanitize({
         "index": index,
         "setups_evaluated": [s["id"] for s in all_setups],
         "count": len(results),
         "coverage": stats,
+        "cache": cache_info,
         "results": results,
     })
 

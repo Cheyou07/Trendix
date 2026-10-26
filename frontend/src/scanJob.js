@@ -60,8 +60,9 @@ export async function runScanJob(request, parameters, {
       const progress = job.progress || {};
       const elapsed = job.elapsed_seconds || 0;
       const limit = job.timeout_seconds || 600;
+      const phase = { fetching: "Fetching prices", cache: "Checking shared results", cached: "Reusing evaluations" }[progress.phase] || "Evaluating setups";
       const detail = progress.total
-        ? `${progress.phase === "fetching" ? "Fetching prices" : "Evaluating setups"}: ${progress.done}/${progress.total} stocks processed`
+        ? `${phase}: ${progress.done}/${progress.total} stocks processed (${progress.reused || 0} reused)`
         : "Starting the scan";
       onStatus(`${detail}. ${elapsed}s elapsed; server limit ${limit}s.`);
     } else {

@@ -5,7 +5,7 @@ import { getStockDetail, getStockHistory, downloadUrl } from "../api";
 const TF_LABELS = { monthly: "Monthly", weekly: "Weekly", daily: "Daily" };
 const EMA_COLORS = { 5: "#7AA2F7", 13: "#E08860", 26: "#C792EA", 50: "#5FB98A", 200: "#E37568" };
 
-export default function StockDetail({ symbol, setup, allSetupsForStock, snapshotDetail, snapshotDate, onClose }) {
+export default function StockDetail({ symbol, setup, allSetupsForStock, scanDetail, snapshotDetail, snapshotDate, onClose }) {
   // allSetupsForStock (only present when opened from "Best matches across
   // all setups"): the full breakdown for EVERY setup this stock was
   // evaluated against, already fetched by the scan-all call. Letting the
@@ -33,6 +33,10 @@ export default function StockDetail({ symbol, setup, allSetupsForStock, snapshot
       setDetail(snapshotDetail);
       return;
     }
+    if (scanDetail) {
+      setDetail(scanDetail);
+      return;
+    }
 
     if (hasMultipleSetups) {
       // Already have every setup's breakdown client-side from the
@@ -45,7 +49,7 @@ export default function StockDetail({ symbol, setup, allSetupsForStock, snapshot
     }
 
     getStockDetail(symbol, activeSetupId).then(setDetail).catch((e) => setError(e.message));
-  }, [symbol, activeSetupId, hasMultipleSetups, allSetupsForStock, snapshotDetail]);
+  }, [symbol, activeSetupId, hasMultipleSetups, allSetupsForStock, scanDetail, snapshotDetail]);
 
   useEffect(() => {
     if (!chartRef.current || chartInstance.current) return;
@@ -134,6 +138,9 @@ export default function StockDetail({ symbol, setup, allSetupsForStock, snapshot
 
         {snapshotDetail && <p className="status-line">Saved conditions from {snapshotDate}. Last market candle: {snapshotDetail.data_as_of || "unknown"}. Charts and CSV downloads are not archived with daily runs.</p>}
         {!snapshotDetail && <div className="chart-container" ref={chartRef} />}
+        {!snapshotDetail && detail?.price_fetched_at && (
+          <p className="status-line">These conditions use scan prices requested at {new Date(detail.price_fetched_at).toLocaleString()}. The chart is loaded separately and may show newer data.</p>
+        )}
         {chartError && (
           <div className="empty-state" style={{ padding: "8px 0 16px", fontSize: 12 }}>
             Chart data unavailable: {chartError}
