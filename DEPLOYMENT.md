@@ -2,8 +2,30 @@
 
 The repository now includes a deployable Docker image, a Render Blueprint,
 MongoDB history, a public history screen, and a GitHub Actions scheduler.
-It has **not been deployed**: your GitHub repository, Render service, and Atlas
-database still need to be connected. No account credentials are in these files.
+No account credentials are in these files. Existing deployments can use the
+upgrade steps below without changing MongoDB credentials or GitHub secrets.
+
+## Upgrade an existing deployment after the stuck-scan fix
+
+1. Deploy the latest `main` commit in Render (or wait for automatic deployment).
+   The restart clears the old stuck in-memory scan.
+2. Keep **one Uvicorn worker and one Render instance**. The app now starts at most
+   one disposable scan process alongside that web worker.
+3. Keep the existing `SCANNER_URL` and `CRON_SECRET` GitHub secrets unchanged.
+   The updated workflow installs Python dependencies, computes on GitHub's runner,
+   and uploads results. No MongoDB URI is needed in GitHub.
+4. Cancel any older still-running **Daily setup snapshots** workflow, then run
+   the latest workflow after Render finishes deploying.
+5. Run a NIFTYBANK setup from the website, then another setup. Progress shows the
+   stock count. `/api/scanner/status` reports activity, queued scans and the deadline;
+   `/api/health` includes the deployed commit when Render supplies it.
+
+The previous implementation could leave Yahoo's shared batch downloader waiting
+indefinitely after an overlapping chart request. Neither the scanner nor the
+shared daily/interactive queue had a server deadline. The new downloader uses
+independent per-ticker histories, and a hard process timeout releases the slot even
+if a data request hangs. The old scheduler endpoint returns HTTP 410 and cannot
+occupy the interactive queue.
 
 ## Recommended first deployment
 
@@ -11,7 +33,7 @@ database still need to be connected. No account credentials are in these files.
 | --- | --- | --- |
 | Render | Serves React and the Python API together at one HTTPS URL | Free web service |
 | MongoDB Atlas | Stores compressed daily results independently of server restarts | Free cluster |
-| GitHub Actions | Starts the daily scan and waits for completion | Standard Linux runner, subject to account allowance |
+| GitHub Actions | Computes daily scans and uploads snapshots | Standard Linux runner, subject to account allowance |
 
 Vercel is optional. It hosts the frontend if desired; MongoDB is the actual
 database. Keeping both frontend and backend on Render initially avoids a second
@@ -19,8 +41,7 @@ deployment and cross-origin configuration.
 
 ### 1. Put this folder in a GitHub repository
 
-This workspace did not contain Git metadata when inspected. Create a repository
-in your own GitHub account, then upload or push this project, including
+Use your existing repository or create one, then push this project, including
 `.github/workflows/daily-snapshot.yml`, `Dockerfile`, and `render.yaml`.
 A private repository is fine; public website access does not require public source.
 
@@ -88,10 +109,11 @@ schedules are disabled after 60 days without activity. Monitor workflow failures
 there is no guaranteed daily execution or historical backfill. A manual retry on
 the same day is safe. See [GitHub schedule behavior](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#schedule).
 
-The workflow calls an authenticated endpoint on Render and polls every 15 seconds
-until persistence completes. MongoDB credentials stay only on Render, so GitHub
-runners do not need direct database network access. Busy scans are retried by the
-scheduler. A failed daily scan fails the workflow so you can see it and rerun it.
+The workflow reads an authenticated daily plan, fetches prices and computes all
+setups on the GitHub runner, then uploads each missing snapshot to Render.
+It never enters the visitor scan queue. MongoDB credentials stay only on Render;
+GitHub needs neither the database URI nor direct Atlas network access. Uploads
+retry transient failures. A failed daily scan fails the workflow visibly.
 
 ## Exactly what gets stored
 
@@ -131,12 +153,15 @@ not overwrite the scheduled history.
 
 Scans use `POST /api/runs` and `GET /api/runs/{job_id}` so the browser waits through
 short polling requests. Identical jobs reuse results for up to five minutes;
-only one scan runs at a time, and new interactive jobs have a global one-minute
-cooldown. The browser shows a countdown and automatically retries when the server
-is busy or cooling down, using its `Retry-After` response. The cooldown is shared
-across visitors; switching devices does not bypass it. Rejected requests do not
-extend the cooldown. Visitors can stop waiting; already-started shared server work
-continues. Admission waits and processing share a 30-minute browser deadline.
+one interactive scan runs at a time, with two additional distinct scans allowed
+in a FIFO queue. There is no global cooldown. The browser shows queue position
+and actual stock progress; it retries admission if the queue is full.
+Each scan runs in a disposable process, terminated after at most ten minutes
+(`SCAN_TIMEOUT_SECONDS` can lower the limit, between 30 and 600 seconds).
+Failed scans release the slot immediately and can be retried. Price data is
+cached locally for five minutes to reduce repeated downloads across setups.
+Visitors can stop waiting; already-started shared server work continues within
+its deadline. Admission waits and processing share a 30-minute browser deadline.
 Actual scan failures are displayed without silently rerunning them. The previous
 synchronous `/api/scan` and `/api/scan-all` routes have been
 replaced; external API clients must migrate to the job endpoints.
@@ -153,8 +178,8 @@ This is an initial beta configuration, not an availability guarantee:
   expiry should keep this small, but actual payload size and database usage must
   be measured after deployment. See [Atlas limits](https://www.mongodb.com/docs/atlas/reference/free-shared-limitations/).
 - Standard GitHub-hosted runners are free for public repositories; private
-  repositories have account-specific included allowances. Waiting for the scan
-  also consumes runner time. See [Actions billing](https://docs.github.com/en/billing/concepts/product-billing/github-actions).
+  repositories have account-specific included allowances. Computing snapshots
+  consumes runner time. See [Actions billing](https://docs.github.com/en/billing/concepts/product-billing/github-actions).
 - Yahoo/NSE availability from the hosting region must be verified with a real
   deployed scan. Cloud IP restrictions, rate limits, or free-service memory/CPU
   limits may cause failures, particularly with all five indexes.

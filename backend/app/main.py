@@ -1,6 +1,5 @@
 import io
 import logging
-import math
 import traceback
 from functools import lru_cache
 
@@ -10,6 +9,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 
 from .providers.yfinance_provider import YFinanceProvider
+from .errors import ScanError
+from .jsonutils import sanitize as _sanitize
 from .universe import get_index_symbols, list_available_indexes
 from .setup_engine import load_setup, list_setups, evaluate_setup
 from .scanner import scan_universe, scan_universe_all_setups, build_timeframe_data
@@ -30,16 +31,6 @@ app.add_middleware(
 )
 
 provider = YFinanceProvider()
-
-def _sanitize(obj):
-    if isinstance(obj, float):
-        return None if (math.isnan(obj) or math.isinf(obj)) else obj
-    if isinstance(obj, dict):
-        return {k: _sanitize(v) for k, v in obj.items()}
-    if isinstance(obj, list):
-        return [_sanitize(v) for v in obj]
-    return obj
-
 
 @lru_cache(maxsize=24)
 def _fetch_single_timeframe_data(symbol: str, cache_period: int):
@@ -70,7 +61,8 @@ def get_setups():
 
 
 def scan(index: str = "NIFTY50", setup: str = "setup_1", near_matches: bool = True,
-         near_match_score: float = 70.0):
+         near_match_score: float = 70.0, progress_callback=None):
+    stats = {}
     try:
         symbols = get_index_symbols(index)
     except ValueError as e:
@@ -92,7 +84,10 @@ def scan(index: str = "NIFTY50", setup: str = "setup_1", near_matches: bool = Tr
         results = scan_universe(
             provider, symbols, setup_config,
             include_near_matches=near_matches, near_match_score=near_match_score,
+            progress_callback=progress_callback, stats=stats,
         )
+    except ScanError:
+        raise
     except Exception as e:
         logger.error("Scan failed:\n%s", traceback.format_exc())
         raise HTTPException(
@@ -102,10 +97,11 @@ def scan(index: str = "NIFTY50", setup: str = "setup_1", near_matches: bool = Tr
             f"check your internet connection.",
         )
 
-    return _sanitize({"index": index, "setup": setup_config["name"], "count": len(results), "results": results})
+    return _sanitize({"index": index, "setup": setup_config["name"], "count": len(results),
+                      "coverage": stats, "results": results})
 
 
-def scan_all(index: str = "NIFTY50", direction: str = "all"):
+def scan_all(index: str = "NIFTY50", direction: str = "all", progress_callback=None):
     """
     Runs every registered setup (optionally filtered to bullish/bearish
     only) against every stock in the universe, fetching each stock's
@@ -126,8 +122,12 @@ def scan_all(index: str = "NIFTY50", direction: str = "all"):
         all_setups = [s for s in all_setups if s["direction"] == direction]
     setup_configs = [load_setup(s["id"]) for s in all_setups]
 
+    stats = {}
     try:
-        results = scan_universe_all_setups(provider, symbols, setup_configs)
+        results = scan_universe_all_setups(provider, symbols, setup_configs,
+                                          progress_callback=progress_callback, stats=stats)
+    except ScanError:
+        raise
     except Exception as e:
         logger.error("Scan-all failed:\n%s", traceback.format_exc())
         raise HTTPException(
@@ -140,6 +140,7 @@ def scan_all(index: str = "NIFTY50", direction: str = "all"):
         "index": index,
         "setups_evaluated": [s["id"] for s in all_setups],
         "count": len(results),
+        "coverage": stats,
         "results": results,
     })
 
@@ -217,9 +218,9 @@ def download_symbol(symbol: str, timeframe: str = "daily"):
 
 @app.get("/api/health")
 def health():
-    return {"status": "ok"}
+    return {"status": "ok", "revision": os.getenv("RENDER_GIT_COMMIT", "local")}
 
 
 from .hosting import install_hosting
 
-install_hosting(app, scan, scan_all, _sanitize)
+install_hosting(app)

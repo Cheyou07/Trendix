@@ -24,7 +24,8 @@ def collection():
     uri = os.getenv('MONGODB_URI')
     if not uri:
         raise HTTPException(503, 'Daily history is not configured yet.')
-    client = MongoClient(uri, serverSelectionTimeoutMS=8000, tz_aware=True)
+    client = MongoClient(uri, serverSelectionTimeoutMS=8000, connectTimeoutMS=8000,
+                         socketTimeoutMS=10000, tz_aware=True)
     coll = client[os.getenv('MONGODB_DATABASE', 'nifty_scanner')]['daily_runs']
     coll.create_index([('run_date', 1), ('index', 1), ('setup_id', 1)], unique=True)
     coll.create_index('expires_at', expireAfterSeconds=0)

@@ -42,7 +42,7 @@ export async function runScanJob(request, parameters, {
       while (now() < retryAt) {
         checkDeadline();
         const remaining = Math.ceil((retryAt - now()) / 1000);
-        onStatus(`The shared scanner is busy or cooling down. Retrying automatically in ${remaining}s…`);
+        onStatus(`The scan queue is full. Retrying automatically in ${remaining}s…`);
         await wait(Math.min(1000, retryAt - now(), deadline - now()), signal);
       }
     }
@@ -54,6 +54,19 @@ export async function runScanJob(request, parameters, {
     checkDeadline();
     if (job.status === "completed") return job.result;
     if (job.status === "failed") throw new Error(job.error || "The scan failed. Please retry later.");
+    if (job.status === "queued") {
+      onStatus(`Your scan is queued (position ${job.queue_position}). It will start automatically.`);
+    } else if (job.status === "running") {
+      const progress = job.progress || {};
+      const elapsed = job.elapsed_seconds || 0;
+      const limit = job.timeout_seconds || 600;
+      const detail = progress.total
+        ? `${progress.phase === "fetching" ? "Fetching prices" : "Evaluating setups"}: ${progress.done}/${progress.total} stocks processed`
+        : "Starting the scan";
+      onStatus(`${detail}. ${elapsed}s elapsed; server limit ${limit}s.`);
+    } else {
+      throw new Error("The server returned an unknown scan status. Please retry.");
+    }
     await wait(Math.min(3000, deadline - now()), signal);
   }
 }
