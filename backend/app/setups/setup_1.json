@@ -1,0 +1,25 @@
+{
+  "id": "setup_1",
+  "name": "Setup 1 - Multi-Timeframe Trend",
+  "description": "Monthly trend confirmation + weekly momentum entry + daily long-term structure",
+  "timeframes": {
+    "monthly": [
+      { "id": "close_above_ema50", "condition": "close_above_ema50" },
+      { "id": "macd_crossed_up", "condition": "macd_crossover" },
+      { "id": "ema50_rising_3_months", "condition": "ema50_rising_3" }
+    ],
+    "weekly": [
+      { "id": "close_above_ema50", "condition": "close_above_ema50" },
+      { "id": "ema50_support", "condition": "ema_support_50" },
+      { "id": "ema_bullish_crossover", "condition": "ema_bullish_5_13_26" },
+      { "id": "stochastic_above_80", "condition": "stochastic_above_80" },
+      { "id": "rsi_bounce", "condition": "rsi_bounce_60" }
+    ],
+    "daily": [
+      { "id": "close_above_ema200", "condition": "close_above_ema200" },
+      { "id": "ema50_above_ema200", "condition": "ema50_above_ema200" },
+      { "id": "ema50_support", "condition": "ema_support_50" },
+      { "id": "ema_bullish_crossover", "condition": "ema_bullish_5_13_26" }
+    ]
+  }
+}

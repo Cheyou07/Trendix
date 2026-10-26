@@ -1,0 +1,20 @@
+{
+  "id": "setup_9",
+  "name": "Trend Reversal Swing - Bearish (Double Top / Fake Breakout)",
+  "description": "Weekly resistance + daily double-top or fake-breakout reversal with confirming momentum",
+  "direction": "bearish",
+  "timeframes": {
+    "weekly": [
+      { "id": "bbnc_upside", "condition": "bbnc_upside" }
+    ],
+    "daily": [
+      { "id": "double_top", "condition": "double_top" },
+      { "id": "bearish_candle_pattern", "condition": "bearish_candle_pattern" },
+      { "id": "volume_above_avg", "condition": "volume_above_avg" },
+      { "id": "macd_downtick", "condition": "macd_downtick" },
+      { "id": "rsi_below_60", "condition": "rsi_below_60" },
+      { "id": "stoch_nco_from_overbought", "condition": "stoch_nco_from_overbought" },
+      { "id": "di_bearish", "condition": "di_bearish" }
+    ]
+  }
+}

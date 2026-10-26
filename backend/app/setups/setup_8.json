@@ -1,0 +1,20 @@
+{
+  "id": "setup_8",
+  "name": "Trend Reversal Swing - Bullish (Double Bottom / Fake Breakdown)",
+  "description": "Weekly base + daily double-bottom or fake-breakdown reversal with confirming momentum",
+  "direction": "bullish",
+  "timeframes": {
+    "weekly": [
+      { "id": "bbnc_downside", "condition": "bbnc_downside" }
+    ],
+    "daily": [
+      { "id": "double_bottom", "condition": "double_bottom" },
+      { "id": "bullish_candle_pattern", "condition": "bullish_candle_pattern" },
+      { "id": "volume_above_avg", "condition": "volume_above_avg" },
+      { "id": "macd_uptick", "condition": "macd_uptick" },
+      { "id": "rsi_above_40", "condition": "rsi_above_40" },
+      { "id": "stoch_pco_from_oversold", "condition": "stoch_pco_from_oversold" },
+      { "id": "di_bullish", "condition": "di_bullish" }
+    ]
+  }
+}

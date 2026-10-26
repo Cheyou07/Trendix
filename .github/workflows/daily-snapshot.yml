@@ -1,0 +1,29 @@
+name: Daily setup snapshots
+
+on:
+  schedule:
+    # UTC: 11:17 = 16:47 IST, every calendar day (including weekends).
+    - cron: '17 11 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: daily-snapshots
+  cancel-in-progress: false
+
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Run all setups and wait for persistence
+        env:
+          SCANNER_URL: ${{ secrets.SCANNER_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: python scripts/daily_snapshot.py

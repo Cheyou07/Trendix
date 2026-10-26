@@ -1,0 +1,27 @@
+{
+  "id": "setup_5",
+  "name": "Triangle Breakdown - Bearish",
+  "description": "Weekly momentum below zero-line + daily triangle breakdown confirmation",
+  "direction": "bearish",
+  "timeframes": {
+    "weekly": [
+      { "id": "macd_downtick_bz", "condition": "macd_downtick" },
+      { "id": "macd_below_zero", "condition": "macd_below_zero" },
+      { "id": "bbnc_upside", "condition": "bbnc_upside" },
+      { "id": "double_screen_confirmation", "condition": "double_screen_bearish" },
+      { "id": "price_below_ema50", "condition": "price_below_ema50" }
+    ],
+    "daily": [
+      { "id": "triangle_breakdown", "condition": "triangle_breakdown" },
+      { "id": "trendline_breakdown", "condition": "trendline_breakdown" },
+      { "id": "lbbc", "condition": "lbbc" },
+      { "id": "stochastic_below_20", "condition": "stochastic_below_20" },
+      { "id": "rsi_below_40", "condition": "rsi_below_40" },
+      { "id": "di_bearish", "condition": "di_bearish" },
+      { "id": "adx_rising_above_15", "condition": "adx_rising_above_15" },
+      { "id": "price_below_ema50", "condition": "price_below_ema50" },
+      { "id": "double_screen_confirmation", "condition": "double_screen_bearish" },
+      { "id": "volume_above_avg", "condition": "volume_above_avg" }
+    ]
+  }
+}

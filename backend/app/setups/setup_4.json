@@ -1,0 +1,27 @@
+{
+  "id": "setup_4",
+  "name": "Triangle Breakout - Bullish",
+  "description": "Weekly momentum above zero-line + daily triangle breakout confirmation",
+  "direction": "bullish",
+  "timeframes": {
+    "weekly": [
+      { "id": "macd_uptick_az", "condition": "macd_uptick" },
+      { "id": "macd_above_zero", "condition": "macd_above_zero" },
+      { "id": "bbnc_downside", "condition": "bbnc_downside" },
+      { "id": "double_screen_confirmation", "condition": "double_screen_bullish" },
+      { "id": "price_above_ema50", "condition": "price_above_ema50" }
+    ],
+    "daily": [
+      { "id": "triangle_breakout_up", "condition": "triangle_breakout_up" },
+      { "id": "trendline_breakout_up", "condition": "trendline_breakout_up" },
+      { "id": "ubbc", "condition": "ubbc" },
+      { "id": "stochastic_above_80", "condition": "stochastic_above_80" },
+      { "id": "rsi_above_60", "condition": "rsi_above_60" },
+      { "id": "di_bullish", "condition": "di_bullish" },
+      { "id": "adx_rising_above_15", "condition": "adx_rising_above_15" },
+      { "id": "price_above_ema50", "condition": "price_above_ema50" },
+      { "id": "double_screen_confirmation", "condition": "double_screen_bullish" },
+      { "id": "volume_above_avg", "condition": "volume_above_avg" }
+    ]
+  }
+}

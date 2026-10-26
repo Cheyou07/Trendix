@@ -1,0 +1,26 @@
+{
+  "id": "setup_3",
+  "name": "3rd Wave Setup - Bearish",
+  "description": "Weekly trend confirmation + daily momentum entry with trendline breakdown",
+  "direction": "bearish",
+  "timeframes": {
+    "weekly": [
+      { "id": "macd_downtick", "condition": "macd_downtick" },
+      { "id": "bbnc_upside", "condition": "bbnc_upside" },
+      { "id": "price_below_ema50", "condition": "price_below_ema50" }
+    ],
+    "daily": [
+      { "id": "lower_highs_2", "condition": "lower_highs_2" },
+      { "id": "trendline_breakdown", "condition": "trendline_breakdown" },
+      { "id": "lbbc", "condition": "lbbc" },
+      { "id": "rsi_below_40", "condition": "rsi_below_40" },
+      { "id": "adx_rising_above_15", "condition": "adx_rising_above_15" },
+      { "id": "di_bearish", "condition": "di_bearish" },
+      { "id": "price_below_ema50", "condition": "price_below_ema50" },
+      { "id": "macd_downtick", "condition": "macd_downtick" },
+      { "id": "stoch_nco", "condition": "stoch_nco" },
+      { "id": "rsi_downtick", "condition": "rsi_downtick" },
+      { "id": "volume_above_avg", "condition": "volume_above_avg" }
+    ]
+  }
+}

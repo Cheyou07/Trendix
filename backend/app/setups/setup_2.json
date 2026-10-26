@@ -1,0 +1,26 @@
+{
+  "id": "setup_2",
+  "name": "3rd Wave Setup - Bullish",
+  "description": "Weekly trend confirmation + daily momentum entry with trendline breakout",
+  "direction": "bullish",
+  "timeframes": {
+    "weekly": [
+      { "id": "macd_uptick", "condition": "macd_uptick" },
+      { "id": "bbnc_downside", "condition": "bbnc_downside" },
+      { "id": "price_above_ema50", "condition": "price_above_ema50" }
+    ],
+    "daily": [
+      { "id": "higher_lows_2", "condition": "higher_lows_2" },
+      { "id": "trendline_breakout_up", "condition": "trendline_breakout_up" },
+      { "id": "ubbc", "condition": "ubbc" },
+      { "id": "rsi_above_60", "condition": "rsi_above_60" },
+      { "id": "adx_rising_above_15", "condition": "adx_rising_above_15" },
+      { "id": "di_bullish", "condition": "di_bullish" },
+      { "id": "price_above_ema50", "condition": "price_above_ema50" },
+      { "id": "macd_uptick", "condition": "macd_uptick" },
+      { "id": "stoch_pco", "condition": "stoch_pco" },
+      { "id": "rsi_uptick", "condition": "rsi_uptick" },
+      { "id": "volume_above_avg", "condition": "volume_above_avg" }
+    ]
+  }
+}

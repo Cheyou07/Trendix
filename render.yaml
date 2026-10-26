@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: nifty-setup-scanner
+    runtime: docker
+    plan: free
+    healthCheckPath: /api/health
+    envVars:
+      - key: MONGODB_URI
+        sync: false
+      - key: MONGODB_DATABASE
+        value: nifty_scanner
+      - key: CRON_SECRET
+        generateValue: true
+      - key: SNAPSHOT_INDEXES
+        value: NIFTY50,NIFTYBANK,NIFTY100,NIFTY200,NIFTY500

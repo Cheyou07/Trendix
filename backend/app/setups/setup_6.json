@@ -1,0 +1,23 @@
+{
+  "id": "setup_6",
+  "name": "Ending Diagonal Triangle - Bullish Reversal",
+  "description": "Reversal setup after a downtrend exhausts (approximated wave-C/5th-wave ending pattern)",
+  "direction": "bullish",
+  "timeframes": {
+    "weekly": [
+      { "id": "macd_uptick", "condition": "macd_uptick" },
+      { "id": "bbnc_downside", "condition": "bbnc_downside" }
+    ],
+    "daily": [
+      { "id": "edt_breakout", "condition": "triangle_breakout_up" },
+      { "id": "rsi_bullish_divergence", "condition": "bullish_divergence_rsi" },
+      { "id": "ubbc", "condition": "ubbc" },
+      { "id": "rsi_above_60", "condition": "rsi_above_60" },
+      { "id": "adx_rising_above_15", "condition": "adx_rising_above_15" },
+      { "id": "di_bullish", "condition": "di_bullish" },
+      { "id": "double_screen_confirmation", "condition": "double_screen_bullish" },
+      { "id": "macd_pco", "condition": "macd_crossover" },
+      { "id": "volume_above_avg", "condition": "volume_above_avg" }
+    ]
+  }
+}
