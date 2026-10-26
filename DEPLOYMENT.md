@@ -132,8 +132,13 @@ not overwrite the scheduled history.
 Scans use `POST /api/runs` and `GET /api/runs/{job_id}` so the browser waits through
 short polling requests. Identical jobs reuse results for up to five minutes;
 only one scan runs at a time, and new interactive jobs have a global one-minute
-cooldown. Other scans receive a retry message instead of building an unbounded
-queue. The previous synchronous `/api/scan` and `/api/scan-all` routes have been
+cooldown. The browser shows a countdown and automatically retries when the server
+is busy or cooling down, using its `Retry-After` response. The cooldown is shared
+across visitors; switching devices does not bypass it. Rejected requests do not
+extend the cooldown. Visitors can stop waiting; already-started shared server work
+continues. Admission waits and processing share a 30-minute browser deadline.
+Actual scan failures are displayed without silently rerunning them. The previous
+synchronous `/api/scan` and `/api/scan-all` routes have been
 replaced; external API clients must migrate to the job endpoints.
 
 ## Free-tier and data limitations

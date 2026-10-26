@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import ScannerTable from "./components/ScannerTable.jsx";
 import BestMatchTable from "./components/BestMatchTable.jsx";
 import StockDetail from "./components/StockDetail.jsx";
@@ -17,10 +17,14 @@ export default function App() {
   const [results, setResults] = useState(null);
   const [scanCount, setScanCount] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [scanStatus, setScanStatus] = useState("");
+  const scanController = useRef(null);
   const [error, setError] = useState(null);
   const [selected, setSelected] = useState(null);
   const [showAbout, setShowAbout] = useState(false);
   const [lookupSymbol, setLookupSymbol] = useState("");
+
+  useEffect(() => () => scanController.current?.abort(), []);
 
   useEffect(() => {
     getIndices().then((d) => setIndices(d)).catch((e) => setError(e.message));
@@ -34,26 +38,38 @@ export default function App() {
     setResults(null);
     setSelected(null);
     setScanCount(null);
+    setScanStatus("");
   }, [index, setup, mode, allDirection, nearMatchScore]);
 
   async function handleScan() {
+    if (scanController.current) return;
+    const controller = new AbortController();
+    scanController.current = controller;
+    const options = { signal: controller.signal, onStatus: setScanStatus };
     setLoading(true);
     setError(null);
     setResults(null);
     try {
       if (mode === "single") {
-        const data = await runScan(index, setup, true, nearMatchScore);
+        const data = await runScan(index, setup, true, nearMatchScore, options);
         setResults(data.results);
         setScanCount(data.count);
       } else {
-        const data = await runScanAll(index, allDirection);
+        const data = await runScanAll(index, allDirection, options);
         setResults(data.results);
         setScanCount(data.count);
       }
+      setScanStatus("");
     } catch (e) {
-      setError(e.message);
+      if (e.name === "AbortError") {
+        setScanStatus("Stopped waiting. You can choose another scan.");
+      } else {
+        setError(e.message);
+        setScanStatus("");
+      }
       setResults(null);
     } finally {
+      scanController.current = null;
       setLoading(false);
     }
   }
@@ -140,9 +156,10 @@ export default function App() {
         )}
 
         {mode !== "history" && <button className="primary" onClick={handleScan} disabled={loading}>
-          {loading ? "Scanning…" : "Run scan"}
+          {loading ? "Working…" : "Run scan"}
         </button>}
-        {loading && <p className="status-line" role="status">Fetching market data and evaluating setups. Large indexes can take several minutes; keep this page open.</p>}
+        {scanStatus && <p className="status-line" role="status">{scanStatus}</p>}
+        {loading && <button className="secondary" onClick={() => scanController.current?.abort()}>Stop waiting</button>}
 
         <form className="field-group" onSubmit={handleLookup}>
           <label className="field-label">Inspect any stock directly</label>

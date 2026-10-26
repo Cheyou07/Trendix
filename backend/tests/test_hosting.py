@@ -80,6 +80,37 @@ class HistoryTests(unittest.TestCase):
 
 
 class QueueTests(unittest.TestCase):
+    def test_cooldown_counts_down_and_rejected_requests_do_not_extend_it(self):
+        queue = JobQueue()
+        with patch('app.jobs.Thread'), patch('app.jobs.time.monotonic', return_value=100) as clock:
+            first = queue.submit(('one',), lambda: {})
+            queue._run(first['job_id'], lambda: {})
+            for now, remaining in [(110.2, '50'), (159.5, '1')]:
+                clock.return_value = now
+                with self.assertRaises(HTTPException) as ctx:
+                    queue.submit(('two',), lambda: {})
+                self.assertEqual(ctx.exception.status_code, 429)
+                self.assertEqual(ctx.exception.headers['Retry-After'], remaining)
+                self.assertEqual(queue.last_public_start, 100)
+            # Shared cached results stay accessible throughout the cooldown.
+            self.assertEqual(queue.submit(('one',), lambda: {})['job_id'], first['job_id'])
+            clock.return_value = 160
+            self.assertEqual(queue.submit(('two',), lambda: {})['status'], 'running')
+
+    def test_failure_keeps_rate_limit_but_allows_retry_after_expiry(self):
+        queue = JobQueue()
+        def fail():
+            raise RuntimeError('Provider unavailable')
+        with patch('app.jobs.Thread'), patch('app.jobs.time.monotonic', return_value=100) as clock:
+            first = queue.submit(('one',), fail)
+            with self.assertLogs('app.jobs', level='ERROR'):
+                queue._run(first['job_id'], fail)
+            self.assertEqual(queue.get(first['job_id'])['status'], 'failed')
+            with self.assertRaises(HTTPException):
+                queue.submit(('one',), fail)
+            clock.return_value = 160
+            self.assertNotEqual(queue.submit(('one',), fail)['job_id'], first['job_id'])
+
     def test_duplicate_shares_work_and_busy_scan_is_rejected(self):
         release = Event()
         queue = JobQueue()

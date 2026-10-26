@@ -1,5 +1,6 @@
 """Small, bounded, single-process queue for a single-instance beta deployment."""
 import logging
+import math
 import time
 from threading import Lock, Thread
 from uuid import uuid4
@@ -29,8 +30,9 @@ class JobQueue:
                 raise HTTPException(429, 'Another scan is running. Please retry shortly.',
                                     headers={'Retry-After': '30'})
             if not privileged and now - self.last_public_start < self.cooldown:
-                raise HTTPException(429, 'Please wait a minute before starting another scan.',
-                                    headers={'Retry-After': '60'})
+                remaining = max(1, math.ceil(self.cooldown - (now - self.last_public_start)))
+                raise HTTPException(429, f'The shared scanner is cooling down. Retry in {remaining} seconds.',
+                                    headers={'Retry-After': str(remaining)})
             # Bound retained result memory even when admin requests bypass cooldown.
             while len(self.jobs) >= 6:
                 del self.jobs[next(iter(self.jobs))]
