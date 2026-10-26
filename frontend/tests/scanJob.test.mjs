@@ -60,6 +60,22 @@ test("actual scan failure is shown without resubmitting", async () => {
   assert.equal(posts, 1);
 });
 
+test("queued scans show their position then real stock progress", async () => {
+  const statuses = [];
+  const responses = [
+    { job_id: "job", status: "queued" },
+    { status: "queued", queue_position: 2 },
+    { status: "running", elapsed_seconds: 12, timeout_seconds: 600,
+      progress: { phase: "fetching", done: 40, total: 100 } },
+    { status: "completed", result: { count: 3 } },
+  ];
+  const result = await runScanJob(async () => responses.shift(), {},
+    { ...clock(), onStatus: (s) => statuses.push(s) });
+  assert.equal(result.count, 3);
+  assert.ok(statuses.some((s) => s.includes("position 2")));
+  assert.ok(statuses.some((s) => s.includes("40/100") && s.includes("12s elapsed")));
+});
+
 test("non-429 admission errors are not retried", async () => {
   let calls = 0;
   await assert.rejects(runScanJob(async () => {

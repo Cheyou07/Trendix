@@ -16,6 +16,7 @@ export default function App() {
   const [nearMatchScore, setNearMatchScore] = useState(70);
   const [results, setResults] = useState(null);
   const [scanCount, setScanCount] = useState(null);
+  const [coverage, setCoverage] = useState(null);
   const [loading, setLoading] = useState(false);
   const [scanStatus, setScanStatus] = useState("");
   const scanController = useRef(null);
@@ -38,6 +39,7 @@ export default function App() {
     setResults(null);
     setSelected(null);
     setScanCount(null);
+    setCoverage(null);
     setScanStatus("");
   }, [index, setup, mode, allDirection, nearMatchScore]);
 
@@ -49,15 +51,18 @@ export default function App() {
     setLoading(true);
     setError(null);
     setResults(null);
+    setCoverage(null);
     try {
       if (mode === "single") {
         const data = await runScan(index, setup, true, nearMatchScore, options);
         setResults(data.results);
-        setScanCount(data.count);
+        setScanCount(data.coverage?.evaluated ?? data.count);
+        setCoverage(data.coverage);
       } else {
         const data = await runScanAll(index, allDirection, options);
         setResults(data.results);
-        setScanCount(data.count);
+        setScanCount(data.coverage?.evaluated ?? data.count);
+        setCoverage(data.coverage);
       }
       setScanStatus("");
     } catch (e) {
@@ -203,6 +208,10 @@ export default function App() {
               <button className="secondary" onClick={handleScan}>Retry</button>
             </div>
           </div>
+        )}
+
+        {!error && coverage?.failed > 0 && (
+          <p role="status">{coverage.failed} of {coverage.total} stocks had unavailable data or could not be evaluated. Results cover {coverage.evaluated} stocks.</p>
         )}
 
         {!error && mode === "single" && results && results.length === 0 && (

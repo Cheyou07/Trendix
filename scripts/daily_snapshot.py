@@ -1,22 +1,37 @@
-"""Invoke the deployed scheduler endpoint; keep polling until success or failure.
-
-Uses only Python's standard library. Secrets come from environment variables.
-"""
+"""Compute on GitHub Actions, then upload snapshots to Render using CRON_SECRET."""
 import json
 import os
+import sys
 import time
 import urllib.error
 import urllib.request
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'backend'))
+from app.daily_worker import snapshots_for_plan
 
 
-def request(base, path, token=None):
-    headers = {'Accept': 'application/json'}
-    if token:
-        headers['Authorization'] = f'Bearer {token}'
-    req = urllib.request.Request(base + path, headers=headers,
-                                 method='POST' if token else 'GET')
-    with urllib.request.urlopen(req, timeout=90) as response:
-        return json.load(response)
+def request(base, path, token, deadline, payload=None):
+    headers = {'Accept': 'application/json', 'Authorization': f'Bearer {token}'}
+    data = None
+    if payload is not None:
+        headers['Content-Type'] = 'application/json'
+        data = json.dumps(payload, allow_nan=False).encode()
+    while time.monotonic() < deadline:
+        req = urllib.request.Request(base + path, data=data, headers=headers,
+                                     method='POST' if payload is not None else 'GET')
+        try:
+            with urllib.request.urlopen(req, timeout=min(90, max(1, deadline - time.monotonic()))) as response:
+                return json.load(response)
+        except urllib.error.HTTPError as exc:
+            if exc.code not in (429, 500, 502, 503, 504):
+                raise RuntimeError(f'Snapshot request failed: HTTP {exc.code}. '
+                                   'Check deployment and scheduler settings.') from None
+            print(f'Waiting for service (HTTP {exc.code})...', flush=True)
+        except (urllib.error.URLError, TimeoutError, json.JSONDecodeError):
+            print('Waiting for service to wake up or reconnect...', flush=True)
+        time.sleep(min(15, max(0, deadline - time.monotonic())))
+    raise RuntimeError('Daily snapshot exceeded its 35-minute deadline.')
 
 
 def main():
@@ -25,27 +40,20 @@ def main():
     if not base.startswith('https://'):
         raise SystemExit('SCANNER_URL must use HTTPS.')
     deadline = time.monotonic() + 35 * 60
-    job_id = None
-    while time.monotonic() < deadline:
-        try:
-            if job_id is None:
-                job_id = request(base, '/api/admin/daily-run', token)['job_id']
-            job = request(base, f'/api/runs/{job_id}')
-            if job['status'] == 'completed':
-                print(json.dumps(job['result']))
-                return
-            if job['status'] == 'failed':
-                raise SystemExit(job['error'])
-        except urllib.error.HTTPError as exc:
-            if exc.code == 404 and job_id:
-                job_id = None  # Server restarted; daily writes are idempotent.
-            elif exc.code not in (429, 500, 502, 503, 504):
-                raise SystemExit(f'Scheduler request failed: HTTP {exc.code}') from None
-            print(f'Waiting for service (HTTP {exc.code})…')
-        except (urllib.error.URLError, TimeoutError, json.JSONDecodeError):
-            print('Waiting for service to wake up or reconnect…')
-        time.sleep(15)
-    raise SystemExit('Daily snapshot did not complete within 35 minutes.')
+    plan = request(base, '/api/admin/daily-plan', token, deadline)
+    print(f"Computing {len(plan['pending'])} missing snapshots on this runner.", flush=True)
+
+    def progress(value):
+        if value['phase'] != 'evaluating' or value['done'] % 40 == 0:
+            print(f"{value['phase']}: {value['done']}/{value['total']} stocks, "
+                  f"{value['failed']} unavailable", flush=True)
+
+    saved = 0
+    for payload in snapshots_for_plan(plan, progress):
+        request(base, '/api/admin/daily-snapshot', token, deadline, payload)
+        saved += 1
+        print(f"Saved {payload['index']} / {payload['setup']}", flush=True)
+    print(json.dumps({'run_date': plan['run_date'], 'snapshots_processed': saved}), flush=True)
 
 
 if __name__ == '__main__':

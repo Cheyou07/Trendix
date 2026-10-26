@@ -1,10 +1,11 @@
 import logging
 import time
+
+from .errors import ScanError
 from .indicators import compute_all_indicators, resample_ohlcv
 from .setup_engine import evaluate_setup
 
 logger = logging.getLogger("scanner")
-
 CHUNK_SIZE = 40
 CHUNK_DELAY_SECONDS = 1.5
 
@@ -16,123 +17,76 @@ def build_timeframe_data(daily_raw):
     return {"daily": daily, "weekly": weekly, "monthly": monthly}
 
 
-def _chunks(items, size):
-    for i in range(0, len(items), size):
-        yield items[i:i + size]
+def _evaluate_symbols(provider, symbols, configs, cache_store, progress_callback, stats):
+    output = {}
+    failed = []
+    total = len(symbols)
+    stats = stats if stats is not None else {}
 
+    def report(phase, done):
+        stats.update(total=total, evaluated=len(output), failed=len(failed), missing_symbols=failed[:])
+        if progress_callback:
+            progress_callback(dict(phase=phase, done=done, total=total,
+                                   evaluated=len(output), failed=len(failed)))
 
-def scan_universe(provider, symbols: list[str], setup_config: dict,
-                   include_near_matches: bool = True, near_match_score: float = 70.0,
-                   progress_callback=None, cache_store: dict = None) -> list[dict]:
-    results = []
-    failures = []
-    chunk_list = list(_chunks(symbols, CHUNK_SIZE))
-
-    for ci, chunk in enumerate(chunk_list):
+    for start in range(0, total, CHUNK_SIZE):
+        chunk = symbols[start:start + CHUNK_SIZE]
+        report('fetching', start)
         try:
             batch = provider.get_historical_daily_batch(chunk)
-        except Exception as e:
-            logger.warning(f"Batch fetch failed for chunk starting at {chunk[0]}: {e}")
-            failures.extend(chunk)
+        except Exception:
+            logger.exception("Batch fetch failed")
             batch = {}
-
-        for symbol in chunk:
+        if start == 0 and not any(s in batch and not batch[s].empty for s in chunk):
+            raise ScanError("Yahoo returned no usable market data for the first batch. "
+                            "The data provider may be unavailable or rate-limiting this server. "
+                            "The scan was stopped; please retry later.")
+        for offset, symbol in enumerate(chunk):
             daily_raw = batch.get(symbol)
-            if daily_raw is None or daily_raw.empty:
-                failures.append(symbol)
-                continue
             try:
+                if daily_raw is None or daily_raw.empty:
+                    raise ScanError("No price data")
                 tf_data = build_timeframe_data(daily_raw)
                 if cache_store is not None:
                     cache_store[symbol] = (tf_data, daily_raw)
-                result = evaluate_setup(symbol, setup_config, tf_data)
-                result["data_as_of"] = daily_raw.index[-1].strftime("%Y-%m-%d")
-                if result["qualified"] or (include_near_matches and result["score"] >= near_match_score):
-                    results.append(result)
-            except Exception as e:
-                logger.warning(f"Skipping {symbol}: {e}")
-                failures.append(symbol)
-
-        if progress_callback:
-            progress_callback(min((ci + 1) * CHUNK_SIZE, len(symbols)), len(symbols))
-
-        if ci < len(chunk_list) - 1:
+                rows = []
+                for cfg in configs:
+                    row = evaluate_setup(symbol, cfg, tf_data)
+                    row.update(data_as_of=daily_raw.index[-1].strftime("%Y-%m-%d"),
+                               setup_id=cfg['id'], setup_name=cfg['name'],
+                               direction=cfg.get('direction', 'bullish'))
+                    rows.append(row)
+                output[symbol] = rows
+            except Exception as exc:
+                logger.warning("Skipping %s: %s", symbol, exc)
+                failed.append(symbol)
+            report('evaluating', start + offset + 1)
+        if start + CHUNK_SIZE < total:
             time.sleep(CHUNK_DELAY_SECONDS)
+    if not output:
+        raise ScanError("No stocks could be evaluated. Check the server logs for market-data or setup errors.")
+    report('completed', total)
+    return output
 
-    if failures:
-        logger.info(f"{len(failures)}/{len(symbols)} symbols failed to fetch: {failures[:20]}"
-                     f"{'...' if len(failures) > 20 else ''}")
 
-    if len(failures) == len(symbols) and len(symbols) > 0:
-        raise RuntimeError(
-            f"Could not fetch data for any of {len(symbols)} symbols "
-            f"(e.g. {symbols[0]} failed). Check your internet connection "
-            f"or wait a minute in case Yahoo Finance is rate-limiting."
-        )
-
+def scan_universe(provider, symbols: list[str], setup_config: dict,
+                  include_near_matches: bool = True, near_match_score: float = 70.0,
+                  progress_callback=None, cache_store: dict = None, stats=None) -> list[dict]:
+    evaluated = _evaluate_symbols(provider, symbols, [setup_config], cache_store, progress_callback, stats)
+    results = [rows[0] for rows in evaluated.values()
+               if rows[0]['qualified'] or (include_near_matches and rows[0]['score'] >= near_match_score)]
     results.sort(key=lambda r: (not r["qualified"], -r["score"]))
     return results
 
 
 def scan_universe_all_setups(provider, symbols: list[str], setup_configs: list[dict],
-                              cache_store: dict = None) -> list[dict]:
-    """
-    Fetches each symbol's data ONCE per scan (not once per setup) and
-    evaluates it against every provided setup config. Returns one entry
-    per symbol: {symbol, best, setups: [...]} where 'best' is the setup
-    that symbol matched best (ranked by: qualified setups count, then
-    average score across all setups it was evaluated against).
-    """
-    per_symbol_results = {}
-    failures = []
-    chunk_list = list(_chunks(symbols, CHUNK_SIZE))
-
-    for ci, chunk in enumerate(chunk_list):
-        try:
-            batch = provider.get_historical_daily_batch(chunk)
-        except Exception as e:
-            logger.warning(f"Batch fetch failed for chunk starting at {chunk[0]}: {e}")
-            failures.extend(chunk)
-            batch = {}
-
-        for symbol in chunk:
-            daily_raw = batch.get(symbol)
-            if daily_raw is None or daily_raw.empty:
-                failures.append(symbol)
-                continue
-            try:
-                tf_data = build_timeframe_data(daily_raw)
-                if cache_store is not None:
-                    cache_store[symbol] = (tf_data, daily_raw)
-                setup_results = []
-                for cfg in setup_configs:
-                    r = evaluate_setup(symbol, cfg, tf_data)
-                    r["data_as_of"] = daily_raw.index[-1].strftime("%Y-%m-%d")
-                    r["setup_id"] = cfg["id"]
-                    r["setup_name"] = cfg["name"]
-                    r["direction"] = cfg.get("direction", "bullish")
-                    setup_results.append(r)
-                per_symbol_results[symbol] = setup_results
-            except Exception as e:
-                logger.warning(f"Skipping {symbol}: {e}")
-                failures.append(symbol)
-
-        if ci < len(chunk_list) - 1:
-            time.sleep(CHUNK_DELAY_SECONDS)
-
-    if failures:
-        logger.info(f"{len(failures)}/{len(symbols)} symbols failed to fetch")
-    if len(failures) == len(symbols) and len(symbols) > 0:
-        raise RuntimeError(
-            f"Could not fetch data for any of {len(symbols)} symbols. "
-            f"Check your internet connection or wait a minute in case "
-            f"Yahoo Finance is rate-limiting."
-        )
-
+                             cache_store: dict = None, progress_callback=None, stats=None) -> list[dict]:
+    """Fetch and build indicators once per stock, then evaluate every selected setup."""
+    evaluated = _evaluate_symbols(provider, symbols, setup_configs, cache_store, progress_callback, stats)
     output = []
-    for symbol, setup_results in per_symbol_results.items():
+    for symbol, setup_results in evaluated.items():
         qualified_count = sum(1 for r in setup_results if r["qualified"])
-        avg_score = sum(r["score"] for r in setup_results) / len(setup_results) if setup_results else 0
+        avg_score = sum(r["score"] for r in setup_results) / len(setup_results)
         best = max(setup_results, key=lambda r: (r["qualified"], r["score"]))
         output.append({
             "symbol": symbol,
@@ -144,6 +98,5 @@ def scan_universe_all_setups(provider, symbols: list[str], setup_configs: list[d
             "best_score": best["score"],
             "setups": setup_results,
         })
-
     output.sort(key=lambda r: (-r["qualified_setup_count"], -r["avg_score"]))
     return output

@@ -22,8 +22,10 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - name: Run all setups and wait for persistence
+      - name: Install scanner dependencies
+        run: python -m pip install -r backend/requirements.txt
+      - name: Compute snapshots on this runner and upload results
         env:
           SCANNER_URL: ${{ secrets.SCANNER_URL }}
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
-        run: python scripts/daily_snapshot.py
+        run: python -u scripts/daily_snapshot.py
