@@ -211,11 +211,17 @@ export default function App() {
         <div className="main-header">
           <h1>{headerTitle}</h1>
         </div>
-        <div className="status-line">
+        {loading && (
+          <div className="scan-loading-indicator" role="status" aria-live="polite">
+            <span className="scan-spinner" aria-hidden="true" />
+            <span>Scan in progress…</span>
+          </div>
+        )}
+        {!loading && <div className="status-line">
           {results
             ? `${results.length} result${results.length === 1 ? "" : "s"} from ${scanCount != null ? scanCount : ""} evaluated · click a stock to see the full condition breakdown and chart`
             : "Choose an index and mode on the left, then run a scan."}
-        </div>
+        </div>}
 
         {error && (
           <div className="error-box">
@@ -248,11 +254,11 @@ export default function App() {
           </div>
         )}
 
-        {!error && mode === "single" && (!results || results.length > 0) && (
+        {!loading && !error && mode === "single" && (!results || results.length > 0) && (
           <ScannerTable results={results} onSelect={setSelected} />
         )}
 
-        {!error && mode === "all" && (
+        {!loading && !error && mode === "all" && (
           <BestMatchTable results={results} onSelect={setSelected} />
         )}
         </>

@@ -42,27 +42,36 @@ class ResultCache:
         self.coll = coll
         self.client = None
         self.available = coll is not None or bool(os.getenv('MONGODB_URI'))
+        self.status = 'ready' if coll is not None else ('connecting' if self.available else 'unconfigured')
 
     def _collection(self):
         if self.coll is None:
-            self.client = MongoClient(os.environ['MONGODB_URI'], tz_aware=True,
-                                      serverSelectionTimeoutMS=1500, connectTimeoutMS=1500,
-                                      socketTimeoutMS=2000)
-            self.coll = self.client[os.getenv('MONGODB_DATABASE', 'nifty_scanner')]['scan_cache']
-            self.coll.create_index('expires_at', expireAfterSeconds=0)
+            # A new scan process needs DNS, TLS, authentication and index setup.
+            # Do not consume the short read/write budget during that cold start.
+            with timeout(12):
+                self.client = MongoClient(os.environ['MONGODB_URI'], tz_aware=True,
+                                          serverSelectionTimeoutMS=8000, connectTimeoutMS=5000,
+                                          socketTimeoutMS=5000)
+                coll = self.client[os.getenv('MONGODB_DATABASE', 'nifty_scanner')]['scan_cache']
+                coll.create_index('expires_at', expireAfterSeconds=0)
+                self.coll = coll
+                self.status = 'ready'
         return self.coll
 
-    def _disable(self):
+    def _disable(self, exc):
         # Fail open once per scan, without leaking a connection string to the UI.
-        logger.warning('Shared result cache unavailable; continuing with fresh calculations.')
+        self.status = ('timeout' if exc.timeout else
+                       'access_denied' if getattr(exc, 'code', None) in (13, 18) else 'unavailable')
+        logger.warning('Shared result cache unavailable (%s); continuing with fresh calculations.', self.status)
         self.available = False
 
     def read(self, symbols, signature, now):
         if not self.available:
             return {}
         try:
+            coll = self._collection()
             with timeout(3):
-                docs = list(self._collection().find({
+                docs = list(coll.find({
                     '_id': {'$in': [f'{signature}:{s}' for s in symbols]},
                     'expires_at': {'$gt': now},
                     'fetched_at': {'$gte': now - timedelta(seconds=MAX_AGE_SECONDS), '$lte': now},
@@ -82,8 +91,8 @@ class ResultCache:
                 except (ValueError, KeyError, OSError, EOFError):
                     logger.warning('Ignoring an unreadable shared cache entry.')
             return results
-        except PyMongoError:
-            self._disable()
+        except PyMongoError as exc:
+            self._disable(exc)
             return {}
 
     def write(self, rows_by_symbol, signature, fetched_at):
@@ -100,10 +109,11 @@ class ResultCache:
                             results_gzip=gzip.compress(json.dumps(sanitize(rows), allow_nan=False).encode()))
             operations.append(ReplaceOne({'_id': key}, document, upsert=True))
         try:
+            coll = self._collection()
             with timeout(3):
-                self._collection().bulk_write(operations, ordered=False)
-        except PyMongoError:
-            self._disable()
+                coll.bulk_write(operations, ordered=False)
+        except PyMongoError as exc:
+            self._disable(exc)
 
     def close(self):
         if self.client is not None:

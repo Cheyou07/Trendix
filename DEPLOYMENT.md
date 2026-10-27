@@ -184,8 +184,9 @@ This collection is separate from the seven-day `daily_runs` archive.
   asynchronous TTL deletion. Long scans still contain a range of fetch times.
 - A cache miss fetches prices again and recomputes. Failed stocks are not cached
   as nonmatches. Expired results are never substituted when Yahoo is unavailable.
-- The cache has a short database-operation deadline and fails open: a missing or
-  unavailable database does not prevent interactive scans.
+- The cache allows up to 12 seconds for its initial DNS/TLS/authentication and
+  index setup, then three seconds per read/write operation. It fails open:
+  a missing or unavailable database does not prevent interactive scans.
 
 Choose **Result freshness → Fresh scan — fetch prices again** to bypass cached
 evaluations, local price reuse, and existing job reuse. A successful fresh scan

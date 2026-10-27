@@ -43,6 +43,7 @@ def _evaluate_symbols(provider, symbols, configs, cache_store, progress_callback
             stats['cache'] = dict(reused_stocks=cache_hits, recalculated_stocks=len(output) - cache_hits,
                                   max_age_seconds=MAX_AGE_SECONDS, bypassed=not use_cache,
                                   available=result_cache.available,
+                                  status=result_cache.status,
                                   oldest_price_fetch=min(fetched_times).isoformat() if fetched_times else None,
                                   newest_price_fetch=max(fetched_times).isoformat() if fetched_times else None)
         if progress_callback:

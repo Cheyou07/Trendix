@@ -115,6 +115,7 @@ class CacheTests(unittest.TestCase):
         result = self.scan(['AAA'], threshold=50, stats=stats)
         self.assertEqual(len(result), 1)
         self.assertFalse(stats['cache']['available'])
+        self.assertEqual(stats['cache']['status'], 'timeout')
         unavailable.find.assert_called_once()
         unavailable.bulk_write.assert_not_called()
 
