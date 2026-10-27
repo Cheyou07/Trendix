@@ -201,7 +201,7 @@ export default function App() {
         </div>
       </aside>
 
-      <main className="main">
+      <main className={loading ? "main main-scanning" : "main"}>
         {showAbout ? (
           <AboutPage onClose={() => setShowAbout(false)} />
         ) : mode === "history" ? (

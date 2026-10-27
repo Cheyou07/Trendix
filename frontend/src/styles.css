@@ -163,6 +163,7 @@ button.secondary:hover { border-color: var(--accent); }
 
 /* Main area */
 .main {
+  position: relative;
   flex: 1;
   overflow-y: auto;
   padding: 32px 44px 60px;
@@ -508,7 +509,7 @@ button.secondary:hover { border-color: var(--accent); }
 .setup-switcher select { margin: 0; }
 
 .scan-loading-indicator {
-  position: fixed;
+  position: absolute;
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
@@ -542,6 +543,7 @@ button.secondary:hover { border-color: var(--accent); }
   .shell { height: auto; min-height: 100vh; flex-direction: column; overflow: visible; }
   .sidebar { width: 100%; overflow: visible; border-right: none; border-bottom: 1px solid var(--border); }
   .main { overflow: visible; padding: 24px 16px; min-width: 0; }
+  .main-scanning { min-height: 320px; }
   .stock-card, .stock-card-left { flex-wrap: wrap; gap: 10px; }
   .stock-card-right { margin-left: auto; }
   .detail-panel { width: 100%; padding: 20px 14px; }
